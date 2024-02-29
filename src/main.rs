@@ -1,14 +1,10 @@
 mod models;
 mod handlers;
-mod consts;
+mod utils;
 
-use axum::{extract::State, routing::get, Router, Json};
+use axum::{routing::get, Router};
 use std::sync::Arc;
-use axum::extract::Path;
-use axum::http::StatusCode;
 use scylla::{Session, SessionBuilder};
-use serde_json::{json, Value};
-use crate::models::ledger::LedgerScylla;
 
 
 struct AppState {
@@ -35,9 +31,7 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/ledger/index/:ledger_index", get(handlers::ledger::ledger_by_index_handler))
-        .route("/ledger/hash/:ledger_hash", get(handlers::ledger::ledger_by_hash_handler))
-        .route("/ledger/time/:unix_time", get(handlers::ledger::ledger_at_time_handler))
+        .route("/ledger/:ledger_identifier", get(handlers::ledger::get_ledger_handler))
         .route("/transaction/hash/:tx_hash", get(handlers::transaction::get_transaction_by_hash))
         .with_state(shared_state);
 

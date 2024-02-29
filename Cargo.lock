@@ -858,6 +858,7 @@ dependencies = [
  "scylla",
  "serde",
  "serde_json",
+ "thiserror",
  "tokio",
 ]
 

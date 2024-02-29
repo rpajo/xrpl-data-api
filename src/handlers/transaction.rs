@@ -5,7 +5,7 @@ use axum::Json;
 use scylla::Session;
 use scylla::transport::session::TypedRowIter;
 use crate::AppState;
-use crate::consts::{KEYSPACE, TRANSACTIONS_TABLE};
+use crate::utils::consts::{KEYSPACE, TRANSACTIONS_TABLE};
 use crate::models::transaction::Transaction;
 
 pub async fn get_transaction_by_hash(
