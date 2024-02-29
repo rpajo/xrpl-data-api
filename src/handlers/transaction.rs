@@ -3,25 +3,56 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use scylla::Session;
-use scylla::transport::session::TypedRowIter;
 use crate::AppState;
-use crate::utils::consts::{KEYSPACE, TRANSACTIONS_TABLE};
+use crate::utils::consts::{KEYSPACE, TRANSACTIONS_ACCOUNT_MV_TABLE, TRANSACTIONS_TABLE};
 use crate::models::transaction::Transaction;
+use crate::utils::errors::{DataApiError, map_error_to_status_code};
 
 pub async fn get_transaction_by_hash(
     State(state): State<Arc<AppState>>,
-    Path(tx_hash): Path<String>
+    Path(tx_hash): Path<String>,
 ) -> anyhow::Result<Json<Transaction>, StatusCode> {
     let match_value = format!("'{}'", tx_hash);
     match get_transactions(&state.scylla_session, "hash", &match_value.to_string()).await {
-        Ok(mut transactions) => Ok(Json(transactions.next().unwrap().unwrap())),
+        Ok(mut transactions) => Ok(Json(transactions.pop().unwrap())),
         Err(err) => {
-            eprintln!("Error fetching transaction: {:?}", err);
-            Err(StatusCode::NOT_FOUND)
-        },
+            eprintln!("{}", err);
+            Err(map_error_to_status_code(&err))
+        }
     }
 }
-async fn get_transactions(session: &Session, field: &str, value: &str) -> anyhow::Result<TypedRowIter<Transaction>> {
+
+pub async fn get_transaction_by_account(
+    State(state): State<Arc<AppState>>,
+    Path(account): Path<String>,
+) -> anyhow::Result<Json<Vec<Transaction>>, StatusCode> {
+    let match_value = format!("'{}'", account);
+    match get_transactions(&state.scylla_session, "account", &match_value.to_string()).await {
+        Ok(transactions) => Ok(Json(transactions)),
+        Err(err) => {
+            eprintln!("{}", err);
+            Err(map_error_to_status_code(&err))
+        }
+    }
+}
+
+pub async fn get_transaction_by_ledger_index(
+    State(state): State<Arc<AppState>>,
+    Path(ledger_index): Path<u32>,
+) -> anyhow::Result<Json<Vec<Transaction>>, StatusCode> {
+    match get_transactions(&state.scylla_session, "ledger_index", &ledger_index.to_string()).await {
+        Ok(transactions) => Ok(Json(transactions)),
+        Err(err) => {
+            eprintln!("{}", err);
+            Err(map_error_to_status_code(&err))
+        }
+    }
+}
+
+async fn get_transactions(session: &Session, field: &str, value: &str) -> Result<Vec<Transaction>, DataApiError> {
+    let table = if field == "account" {
+        TRANSACTIONS_ACCOUNT_MV_TABLE
+    } else { TRANSACTIONS_TABLE };
     // ! NOTE: select column order is important. Must match the order of the struct fields
     let query = format!(
         "SELECT account, \
@@ -38,19 +69,22 @@ async fn get_transactions(session: &Session, field: &str, value: &str) -> anyhow
             meta, \
             tx \
             from \"{}\".{} WHERE {}={};",
-        KEYSPACE, TRANSACTIONS_TABLE, field, value
+        KEYSPACE, table, field, value
     );
     println!("Query: {}", query);
     let query_result = session.query(query, &[]).await?;
-    let transactions_iter = query_result.rows_typed::<Transaction>()?;
+    let transactions_iter = query_result.rows_typed_or_empty();
 
-    // let mut transactions = Vec::new();
-    // for row in transactions_iter {
-    //     match row {
-    //         Ok(tx) => transactions.push(tx),
-    //         Err(err) => eprintln!("Failed to get tx: {:?}", err)
-    //     }
-    // }
+    // todo: better row error handling
+    let transactions = transactions_iter
+        .take(100)
+        .filter_map(|row| row.ok())
+        .collect::<Vec<Transaction>>();
 
-    Ok(transactions_iter)
+    if transactions.is_empty() {
+        return Err(DataApiError::NoDataReturned);
+    }
+    println!("Found {} transactions", transactions.len());
+
+    Ok(transactions)
 }

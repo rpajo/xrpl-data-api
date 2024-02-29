@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use num_bigint::BigInt;
 use scylla::FromRow;
 use serde::{Serialize, Serializer};
-use serde::ser::SerializeStruct;// Assuming you're using the chrono crate for handling timestamps
+use serde::ser::SerializeStruct;
 
 #[derive(Debug, FromRow)]
 pub struct Transaction {

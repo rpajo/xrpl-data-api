@@ -33,6 +33,8 @@ async fn main() {
     let app = Router::new()
         .route("/ledger/:ledger_identifier", get(handlers::ledger::get_ledger_handler))
         .route("/transaction/hash/:tx_hash", get(handlers::transaction::get_transaction_by_hash))
+        .route("/transaction/ledger/:ledger_index", get(handlers::transaction::get_transaction_by_ledger_index))
+        .route("/transaction/account/:account", get(handlers::transaction::get_transaction_by_account))
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
