@@ -35,6 +35,7 @@ async fn main() {
         .route("/transaction/hash/:tx_hash", get(handlers::transaction::get_transaction_by_hash))
         .route("/transaction/ledger/:ledger_index", get(handlers::transaction::get_transaction_by_ledger_index))
         .route("/transaction/account/:account", get(handlers::transaction::get_transaction_by_account))
+        .route("/account/:account", get(handlers::account::get_account_handler))
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
