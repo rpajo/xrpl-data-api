@@ -2,6 +2,7 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
+use scylla::query::Query;
 use scylla::Session;
 use crate::AppState;
 use crate::utils::consts::{KEYSPACE, TRANSACTIONS_ACCOUNT_MV_TABLE, TRANSACTIONS_TABLE};
@@ -71,13 +72,15 @@ async fn get_transactions(session: &Session, field: &str, value: &str) -> Result
             from \"{}\".{} WHERE {}={};",
         KEYSPACE, table, field, value
     );
-    println!("Query: {}", query);
-    let query_result = session.query(query, &[]).await?;
+    let mut query: Query = Query::new(query);
+    query.set_page_size(100);
+
+    println!("Query: {}", query.contents);
+    let query_result = session.query_paged(query, &[], None).await?;
     let transactions_iter = query_result.rows_typed_or_empty();
 
     // todo: better row error handling
     let transactions = transactions_iter
-        .take(100)
         .filter_map(|row| row.ok())
         .collect::<Vec<Transaction>>();
 

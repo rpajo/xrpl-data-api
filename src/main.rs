@@ -1,11 +1,10 @@
-mod models;
 mod handlers;
+mod models;
 mod utils;
 
 use axum::{routing::get, Router};
-use std::sync::Arc;
 use scylla::{Session, SessionBuilder};
-
+use std::sync::Arc;
 
 struct AppState {
     scylla_session: Arc<Session>,
@@ -27,15 +26,39 @@ async fn main() {
     let arc_session = Arc::new(session);
 
     let shared_state = Arc::new(AppState {
-        scylla_session: arc_session
+        scylla_session: arc_session,
     });
 
+    // todo: sql injections for strings
     let app = Router::new()
-        .route("/ledger/:ledger_identifier", get(handlers::ledger::get_ledger_handler))
-        .route("/transaction/hash/:tx_hash", get(handlers::transaction::get_transaction_by_hash))
-        .route("/transaction/ledger/:ledger_index", get(handlers::transaction::get_transaction_by_ledger_index))
-        .route("/transaction/account/:account", get(handlers::transaction::get_transaction_by_account))
-        .route("/account/:account", get(handlers::account::get_account_handler))
+        // Ledger handlers
+        .route(
+            "/ledger/:ledger_identifier",
+            get(handlers::ledger::get_ledger_handler),
+        )
+        // Transaction handlers
+        .route(
+            "/transaction/hash/:tx_hash",
+            get(handlers::transaction::get_transaction_by_hash),
+        )
+        .route(
+            "/transaction/ledger/:ledger_index",
+            get(handlers::transaction::get_transaction_by_ledger_index),
+        )
+        .route(
+            "/transaction/account/:account",
+            get(handlers::transaction::get_transaction_by_account),
+        )
+        // Account handlers
+        .route(
+            "/account/:account",
+            get(handlers::account::get_account_handler),
+        )
+        // Balance changes handlers
+        .route(
+            "/account/:account/balance_changes",
+            get(handlers::balance_change::get_account_balance_changes_handler),
+        )
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();

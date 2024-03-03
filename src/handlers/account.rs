@@ -1,12 +1,12 @@
-use std::sync::Arc;
+use crate::models::account::Account;
+use crate::utils::consts::{ACCOUNTS_TABLE, KEYSPACE};
+use crate::utils::errors::{map_error_to_status_code, DataApiError};
+use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use scylla::Session;
-use crate::AppState;
-use crate::models::account::Account;
-use crate::utils::consts::{ACCOUNTS_TABLE, KEYSPACE};
-use crate::utils::errors::{DataApiError, map_error_to_status_code};
+use std::sync::Arc;
 
 pub async fn get_account_handler(
     State(state): State<Arc<AppState>>,
