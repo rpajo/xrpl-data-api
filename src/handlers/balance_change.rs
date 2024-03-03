@@ -1,7 +1,7 @@
 use crate::models::balance_change::BalanceChange;
 use crate::utils::consts::{BALANCE_CHANGES_TABLE, KEYSPACE};
 use crate::utils::errors::{map_error_to_status_code, DataApiError};
-use crate::utils::params::QueryParams;
+use crate::utils::params::DataApiQueryParams;
 use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub async fn get_account_balance_changes_handler(
     State(state): State<Arc<AppState>>,
     Path(account): Path<String>,
-    params: axum::extract::Query<QueryParams>,
+    params: axum::extract::Query<DataApiQueryParams>,
 ) -> anyhow::Result<Json<Vec<BalanceChange>>, StatusCode> {
     let match_value = format!("'{}'", account);
     // let limit = params.0.;

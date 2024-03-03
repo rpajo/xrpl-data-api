@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
-#[derive(Deserialize)]
-pub struct QueryParams {
-    limit: usize
+#[derive(Deserialize, Debug)]
+pub struct DataApiQueryParams {
+    pub limit: Option<usize>,
+    pub ledger_index: Option<u32>,
 }

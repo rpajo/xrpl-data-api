@@ -30,8 +30,8 @@ pub struct LedgerScylla {
 
 impl Serialize for LedgerScylla {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut state = serializer.serialize_struct("LedgerScylla", 11)?;
         state.serialize_field("ledger_index", &self.ledger_index)?;

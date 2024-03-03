@@ -5,6 +5,7 @@ mod utils;
 use axum::{routing::get, Router};
 use scylla::{Session, SessionBuilder};
 use std::sync::Arc;
+use crate::utils::consts::KEYSPACE;
 
 struct AppState {
     scylla_session: Arc<Session>,
@@ -21,6 +22,14 @@ async fn main() {
         .build()
         .await
         .expect("Failed to connect to scylla nodes");
+
+    session
+        .use_keyspace(KEYSPACE, true)
+        .await
+        .expect("Unable to use keyspace");
+
+    /* TODO: Prepare query statements beforehand, 
+        also string into queries can cause sql injections */
     println!("Connected.");
 
     let arc_session = Arc::new(session);
@@ -58,6 +67,11 @@ async fn main() {
         .route(
             "/account/:account/balance_changes",
             get(handlers::balance_change::get_account_balance_changes_handler),
+        )
+        // Payments handlers
+        .route(
+            "/account/:account/payments",
+            get(handlers::payment::get_account_payments_handler),
         )
         .with_state(shared_state);
 
