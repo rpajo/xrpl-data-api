@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use num_bigint::BigInt;
 use scylla::FromRow;
-use serde::{Serialize, Serializer};
 use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 
 #[derive(Debug, FromRow)]
 pub struct Transaction {
@@ -23,8 +23,8 @@ pub struct Transaction {
 
 impl Serialize for Transaction {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut s = serializer.serialize_struct("Transaction", 13)?;
         s.serialize_field("account", &self.account)?;

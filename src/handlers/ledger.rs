@@ -3,13 +3,18 @@ use std::sync::Arc;
 
 use crate::handlers::daily_ledger::get_last_closed_ledger;
 use crate::models::ledger::Ledger;
-use crate::utils::consts::{KEYSPACE, LEDGER_TABLE};
+use crate::utils::consts::LEDGER_TABLE;
 use crate::utils::errors::{map_error_to_status_code, DataApiError};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use scylla::Session;
+
+enum LedgerIdentifier {
+    BigInt(i64),
+    String(String),
+}
 
 pub async fn get_ledger_handler(
     State(state): State<Arc<AppState>>,
@@ -29,13 +34,13 @@ pub async fn get_ledger_handler(
             }
         }
     } else {
-        let search_terms = match ledger_identifier.parse::<u32>() {
-            Ok(ledger_index) => (ledger_index.to_string(), "ledger_index"),
-            Err(_) => (format!("'{}'", ledger_identifier), "ledger_hash"),
+        let search_terms = match ledger_identifier.parse::<i64>() {
+            Ok(ledger_index) => ("ledger_index", LedgerIdentifier::BigInt(ledger_index)),
+            Err(_) => ("ledger_hash", LedgerIdentifier::String(ledger_identifier)),
         };
-        println!("Finding ledger with {}", search_terms.1);
+        println!("Finding ledger with {}", search_terms.0);
 
-        match get_ledger(&state.scylla_session, search_terms.1, &search_terms.0).await {
+        match get_ledger(&state.scylla_session, search_terms.0, &search_terms.1).await {
             Ok(ledger) => Ok(Json(ledger)),
             Err(err) => {
                 eprintln!("{}", err);
@@ -54,13 +59,17 @@ pub async fn get_ledger_at_time(
     let ledger_result = get_ledger(
         session,
         "ledger_index",
-        &latest_closed_ledger.ledger_index.to_string(),
+        &LedgerIdentifier::BigInt(latest_closed_ledger.ledger_index),
     )
-    .await?;
+        .await?;
     Ok(ledger_result)
 }
 
-async fn get_ledger(session: &Session, field: &str, value: &str) -> Result<Ledger, DataApiError> {
+async fn get_ledger(
+    session: &Session,
+    field: &str,
+    value: &LedgerIdentifier,
+) -> Result<Ledger, DataApiError> {
     // ! NOTE: select column order is important. Must match the order of the struct fields
     let query = format!(
         "SELECT ledger_index, \
@@ -74,11 +83,15 @@ async fn get_ledger(session: &Session, field: &str, value: &str) -> Result<Ledge
             total_coins, \
             tx_count, \
             ledger_processed \
-            from \"{}\".{} WHERE {}={};",
-        KEYSPACE, LEDGER_TABLE, field, value
+            from {} WHERE {}=?;",
+        LEDGER_TABLE, field
     );
     println!("Query: {}", query);
-    let query_result = session.query(query, &[]).await?;
+
+    let query_result = match value {
+        LedgerIdentifier::BigInt(val) => session.query(query, (val, )).await?,
+        LedgerIdentifier::String(val) => session.query(query, (val, )).await?,
+    };
     if let Ok(num_of_rows) = query_result.rows_num() {
         if num_of_rows == 0 {
             return Err(DataApiError::NoDataReturned);

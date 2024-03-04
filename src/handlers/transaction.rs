@@ -1,20 +1,20 @@
-use std::sync::Arc;
+use crate::models::transaction::Transaction;
+use crate::utils::consts::{TRANSACTIONS_ACCOUNT_MV_TABLE, TRANSACTIONS_TABLE};
+use crate::utils::errors::{map_error_to_status_code, DataApiError};
+use crate::AppState;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
+use scylla::_macro_internal::SerializeRow;
 use scylla::query::Query;
 use scylla::Session;
-use crate::AppState;
-use crate::utils::consts::{KEYSPACE, TRANSACTIONS_ACCOUNT_MV_TABLE, TRANSACTIONS_TABLE};
-use crate::models::transaction::Transaction;
-use crate::utils::errors::{DataApiError, map_error_to_status_code};
+use std::sync::Arc;
 
 pub async fn get_transaction_by_hash(
     State(state): State<Arc<AppState>>,
     Path(tx_hash): Path<String>,
 ) -> anyhow::Result<Json<Transaction>, StatusCode> {
-    let match_value = format!("'{}'", tx_hash);
-    match get_transactions(&state.scylla_session, "hash", &match_value.to_string()).await {
+    match get_transactions(&state.scylla_session, "hash", (&tx_hash, )).await {
         Ok(mut transactions) => Ok(Json(transactions.pop().unwrap())),
         Err(err) => {
             eprintln!("{}", err);
@@ -27,8 +27,7 @@ pub async fn get_transaction_by_account(
     State(state): State<Arc<AppState>>,
     Path(account): Path<String>,
 ) -> anyhow::Result<Json<Vec<Transaction>>, StatusCode> {
-    let match_value = format!("'{}'", account);
-    match get_transactions(&state.scylla_session, "account", &match_value.to_string()).await {
+    match get_transactions(&state.scylla_session, "account", (&account, )).await {
         Ok(transactions) => Ok(Json(transactions)),
         Err(err) => {
             eprintln!("{}", err);
@@ -39,9 +38,9 @@ pub async fn get_transaction_by_account(
 
 pub async fn get_transaction_by_ledger_index(
     State(state): State<Arc<AppState>>,
-    Path(ledger_index): Path<u32>,
+    Path(ledger_index): Path<i64>,
 ) -> anyhow::Result<Json<Vec<Transaction>>, StatusCode> {
-    match get_transactions(&state.scylla_session, "ledger_index", &ledger_index.to_string()).await {
+    match get_transactions(&state.scylla_session, "ledger_index", (ledger_index, )).await {
         Ok(transactions) => Ok(Json(transactions)),
         Err(err) => {
             eprintln!("{}", err);
@@ -50,10 +49,16 @@ pub async fn get_transaction_by_ledger_index(
     }
 }
 
-async fn get_transactions(session: &Session, field: &str, value: &str) -> Result<Vec<Transaction>, DataApiError> {
+async fn get_transactions(
+    session: &Session,
+    field: &str,
+    values: impl SerializeRow,
+) -> Result<Vec<Transaction>, DataApiError> {
     let table = if field == "account" {
         TRANSACTIONS_ACCOUNT_MV_TABLE
-    } else { TRANSACTIONS_TABLE };
+    } else {
+        TRANSACTIONS_TABLE
+    };
     // ! NOTE: select column order is important. Must match the order of the struct fields
     let query = format!(
         "SELECT account, \
@@ -69,14 +74,14 @@ async fn get_transactions(session: &Session, field: &str, value: &str) -> Result
             result, \
             meta, \
             tx \
-            from \"{}\".{} WHERE {}={};",
-        KEYSPACE, table, field, value
+        from {} WHERE {}=?;",
+        table, field
     );
     let mut query: Query = Query::new(query);
     query.set_page_size(100);
 
     println!("Query: {}", query.contents);
-    let query_result = session.query_paged(query, &[], None).await?;
+    let query_result = session.query_paged(query, values, None).await?;
     let transactions_iter = query_result.rows_typed_or_empty();
 
     // todo: better row error handling

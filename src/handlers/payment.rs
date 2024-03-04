@@ -1,5 +1,5 @@
 use crate::models::payment::Payment;
-use crate::utils::consts::{KEYSPACE, PAYMENTS_TABLE};
+use crate::utils::consts::{DEFAULT_RESULT_LIMIT, PAYMENTS_TABLE};
 use crate::utils::errors::{map_error_to_status_code, DataApiError};
 use crate::utils::params::DataApiQueryParams;
 use crate::AppState;
@@ -15,10 +15,9 @@ pub async fn get_account_payments_handler(
     params: axum::extract::Query<DataApiQueryParams>,
 ) -> anyhow::Result<Json<Vec<Payment>>, StatusCode> {
     println!("Params: {:?}", params.limit);
+    let limit = params.limit.unwrap_or(DEFAULT_RESULT_LIMIT);
 
-    let match_value = format!("'{}'", account);
-    // let limit = params.0.;
-    match get_payments(&state.scylla_session, "source", &match_value.to_string()).await {
+    match get_payments(&state.scylla_session, "source", &account, limit).await {
         Ok(payments) => Ok(Json(payments)),
         Err(err) => {
             eprintln!("{}", err);
@@ -31,6 +30,7 @@ async fn get_payments(
     session: &Session,
     field: &str,
     value: &str,
+    limit: i32,
 ) -> Result<Vec<Payment>, DataApiError> {
     let query = format!(
         "SELECT tx_hash, \
@@ -48,14 +48,14 @@ async fn get_payments(
             destination_tag, \
             source_tag, \
             timestamp \
-        from {} WHERE {}={};",
-        PAYMENTS_TABLE, field, value
+        from {} WHERE {}=?;",
+        PAYMENTS_TABLE, field
     );
     let mut query = scylla::query::Query::new(query);
-    query.set_page_size(100);
+    query.set_page_size(limit);
 
     println!("Query: {}", query.contents);
-    let query_result = session.query_paged(query, (), None).await?;
+    let query_result = session.query_paged(query, (value,), None).await?;
     let payments_iter = query_result.rows_typed_or_empty();
 
     // todo: better row error handling

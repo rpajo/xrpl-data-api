@@ -1,5 +1,5 @@
 use crate::models::balance_change::BalanceChange;
-use crate::utils::consts::{BALANCE_CHANGES_TABLE, KEYSPACE};
+use crate::utils::consts::{BALANCE_CHANGES_TABLE, DEFAULT_RESULT_LIMIT, KEYSPACE};
 use crate::utils::errors::{map_error_to_status_code, DataApiError};
 use crate::utils::params::DataApiQueryParams;
 use crate::AppState;
@@ -14,9 +14,9 @@ pub async fn get_account_balance_changes_handler(
     Path(account): Path<String>,
     params: axum::extract::Query<DataApiQueryParams>,
 ) -> anyhow::Result<Json<Vec<BalanceChange>>, StatusCode> {
-    let match_value = format!("'{}'", account);
-    // let limit = params.0.;
-    match get_balance_changes(&state.scylla_session, "account", &match_value.to_string()).await {
+    let limit = params.limit.unwrap_or(DEFAULT_RESULT_LIMIT);
+
+    match get_balance_changes(&state.scylla_session, "account", &account, limit).await {
         Ok(account) => Ok(Json(account)),
         Err(err) => {
             eprintln!("{}", err);
@@ -29,6 +29,7 @@ async fn get_balance_changes(
     session: &Session,
     field: &str,
     value: &str,
+    limit: i32,
 ) -> Result<Vec<BalanceChange>, DataApiError> {
     let query = format!(
         "SELECT ledger_index, \
@@ -42,14 +43,14 @@ async fn get_balance_changes(
             final_balance, \
             timestamp, \
             tx_hash \
-        from \"{}\".{} WHERE {}={};",
-        KEYSPACE, BALANCE_CHANGES_TABLE, field, value
+        from {} WHERE {}=?;",
+        BALANCE_CHANGES_TABLE, field
     );
     let mut query = scylla::query::Query::new(query);
-    query.set_page_size(100);
+    query.set_page_size(limit);
 
     println!("Query: {}", query.contents);
-    let query_result = session.query_paged(query, &[], None).await?;
+    let query_result = session.query_paged(query, (value,), None).await?;
     let balance_changes_iter = query_result.rows_typed_or_empty();
 
     // todo: better row error handling

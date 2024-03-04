@@ -6,3 +6,5 @@ pub static TRANSACTIONS_TABLE: &str = "transactions";
 pub static PAYMENTS_TABLE: &str = "payments";
 pub static TRANSACTIONS_ACCOUNT_MV_TABLE: &str = "mv_account_transactions";
 pub static BALANCE_CHANGES_TABLE: &str = "balance_changes";
+
+pub static DEFAULT_RESULT_LIMIT: i32 = 100;

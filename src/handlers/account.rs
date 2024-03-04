@@ -1,5 +1,5 @@
 use crate::models::account::Account;
-use crate::utils::consts::{ACCOUNTS_TABLE, KEYSPACE};
+use crate::utils::consts::ACCOUNTS_TABLE;
 use crate::utils::errors::{map_error_to_status_code, DataApiError};
 use crate::AppState;
 use axum::extract::{Path, State};
@@ -12,8 +12,7 @@ pub async fn get_account_handler(
     State(state): State<Arc<AppState>>,
     Path(account): Path<String>,
 ) -> anyhow::Result<Json<Account>, StatusCode> {
-    let match_value = format!("'{}'", account);
-    match get_account(&state.scylla_session, &match_value.to_string()).await {
+    match get_account(&state.scylla_session, &account).await {
         Ok(account) => Ok(Json(account)),
         Err(err) => {
             eprintln!("{}", err);
@@ -32,11 +31,11 @@ async fn get_account(session: &Session, account: &str) -> Result<Account, DataAp
             parent, \
             timestamp, \
             tx_hash \
-            from \"{}\".{} WHERE account={};",
-        KEYSPACE, ACCOUNTS_TABLE, account
+        from {} WHERE account=?;",
+        ACCOUNTS_TABLE
     );
     println!("Query: {}", query);
-    let query_result = session.query(query, &[]).await?;
+    let query_result = session.query(query, (account,)).await?;
     if let Ok(num_of_rows) = query_result.rows_num() {
         if num_of_rows == 0 {
             return Err(DataApiError::NoDataReturned);

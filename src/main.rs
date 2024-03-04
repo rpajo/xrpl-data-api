@@ -28,8 +28,7 @@ async fn main() {
         .await
         .expect("Unable to use keyspace");
 
-    /* TODO: Prepare query statements beforehand,
-    also string into queries can cause sql injections */
+    // TODO: Prepare query statements beforehand
     println!("Connected.");
 
     let arc_session = Arc::new(session);
