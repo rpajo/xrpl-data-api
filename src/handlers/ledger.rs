@@ -1,22 +1,26 @@
-use std::sync::Arc;
 use crate::AppState;
+use std::sync::Arc;
 
-use axum::http::StatusCode;
+use crate::handlers::daily_ledger::get_last_closed_ledger;
+use crate::models::ledger::Ledger;
+use crate::utils::consts::{KEYSPACE, LEDGER_TABLE};
+use crate::utils::errors::{map_error_to_status_code, DataApiError};
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::Json;
-use chrono::{DateTime, NaiveDate, Utc};
-use scylla::{Session};
-use crate::utils::consts::{DAILY_LEDGERS_TABLE, KEYSPACE, LEDGER_TABLE};
-use crate::models::ledger::LedgerScylla;
-use crate::utils::errors::{DataApiError, map_error_to_status_code};
+use chrono::{DateTime, Utc};
+use scylla::Session;
 
 pub async fn get_ledger_handler(
     State(state): State<Arc<AppState>>,
     Path(ledger_identifier): Path<String>,
-) -> Result<Json<LedgerScylla>, StatusCode> {
+) -> Result<Json<Ledger>, StatusCode> {
     let time_parsed = ledger_identifier.parse::<DateTime<Utc>>();
     if let Ok(close_time) = time_parsed {
-        println!("Finding ledger with close time: {}", close_time.format("%Y-%m-%d"));
+        println!(
+            "Finding ledger with close time: {}",
+            close_time.format("%Y-%m-%d")
+        );
         match get_ledger_at_time(&state.scylla_session, close_time).await {
             Ok(ledger) => Ok(Json(ledger)),
             Err(err) => {
@@ -27,7 +31,7 @@ pub async fn get_ledger_handler(
     } else {
         let search_terms = match ledger_identifier.parse::<u32>() {
             Ok(ledger_index) => (ledger_index.to_string(), "ledger_index"),
-            Err(_) => (format!("'{}'", ledger_identifier), "ledger_hash")
+            Err(_) => (format!("'{}'", ledger_identifier), "ledger_hash"),
         };
         println!("Finding ledger with {}", search_terms.1);
 
@@ -41,45 +45,22 @@ pub async fn get_ledger_handler(
     }
 }
 
-pub async fn get_ledger_at_time(session: &Session, close_time: DateTime<Utc>) -> Result<LedgerScylla, DataApiError> {
-    let unix_time_ms = close_time.timestamp_millis();
-    let query = format!(
-        "SELECT ledger_close_day, ledger_index, toUnixTimestamp(close_time) \
-        from \"{}\".{} \
-        WHERE ledger_close_day = toDate({})",
-        KEYSPACE, DAILY_LEDGERS_TABLE, unix_time_ms
-    );
-    println!("Query: {}", query);
-    let query_result = session.query(query, &[]).await?;
-    if let Ok(num_of_rows) = query_result.rows_num() {
-        if num_of_rows == 0 {
-            println!("No ledgers found on day: {}", close_time.format("%Y-%m-%d"));
-            return Err(DataApiError::NoDataReturned);
-        }
-    }
-    let ledger_in_day = query_result.rows_typed_or_empty::<(NaiveDate, i64, i64)>();
+pub async fn get_ledger_at_time(
+    session: &Session,
+    close_time: DateTime<Utc>,
+) -> Result<Ledger, DataApiError> {
+    let latest_closed_ledger = get_last_closed_ledger(session, close_time).await?;
 
-    println!("Find ledger closest after {}", unix_time_ms);
-    let last_closed_ledger = ledger_in_day
-        .map(|l| l.expect("daly ledger should be valid"))
-        .filter(|l| l.2 <= unix_time_ms)
-        .map(|l| l.1)
-        .max();
-
-    match last_closed_ledger {
-        Some(index) => {
-            let ledger_result = get_ledger(
-                session,
-                "ledger_index",
-                &index.to_string(),
-            ).await?;
-            Ok(ledger_result)
-        }
-        None => Err(DataApiError::NoDataReturned),
-    }
+    let ledger_result = get_ledger(
+        session,
+        "ledger_index",
+        &latest_closed_ledger.ledger_index.to_string(),
+    )
+    .await?;
+    Ok(ledger_result)
 }
 
-async fn get_ledger(session: &Session, field: &str, value: &str) -> Result<LedgerScylla, DataApiError> {
+async fn get_ledger(session: &Session, field: &str, value: &str) -> Result<Ledger, DataApiError> {
     // ! NOTE: select column order is important. Must match the order of the struct fields
     let query = format!(
         "SELECT ledger_index, \
@@ -103,7 +84,7 @@ async fn get_ledger(session: &Session, field: &str, value: &str) -> Result<Ledge
             return Err(DataApiError::NoDataReturned);
         }
     }
-    let ledger = query_result.single_row_typed::<LedgerScylla>()?;
+    let ledger = query_result.single_row_typed::<Ledger>()?;
 
     Ok(ledger)
 }

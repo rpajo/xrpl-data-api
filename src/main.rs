@@ -2,10 +2,10 @@ mod handlers;
 mod models;
 mod utils;
 
+use crate::utils::consts::KEYSPACE;
 use axum::{routing::get, Router};
 use scylla::{Session, SessionBuilder};
 use std::sync::Arc;
-use crate::utils::consts::KEYSPACE;
 
 struct AppState {
     scylla_session: Arc<Session>,
@@ -28,8 +28,8 @@ async fn main() {
         .await
         .expect("Unable to use keyspace");
 
-    /* TODO: Prepare query statements beforehand, 
-        also string into queries can cause sql injections */
+    /* TODO: Prepare query statements beforehand,
+    also string into queries can cause sql injections */
     println!("Connected.");
 
     let arc_session = Arc::new(session);
@@ -44,6 +44,14 @@ async fn main() {
         .route(
             "/ledger/:ledger_identifier",
             get(handlers::ledger::get_ledger_handler),
+        )
+        .route(
+            "/daily_ledgers/:close_day",
+            get(handlers::daily_ledger::get_daily_ledgers_handler),
+        )
+        .route(
+            "/closed_ledger/:close_time",
+            get(handlers::daily_ledger::get_latest_closed_ledger_handler),
         )
         // Transaction handlers
         .route(

@@ -55,8 +55,6 @@ async fn get_payments(
     query.set_page_size(100);
 
     println!("Query: {}", query.contents);
-    let a = session.query_paged(query.clone(), (value,), None);
-
     let query_result = session.query_paged(query, (), None).await?;
     let payments_iter = query_result.rows_typed_or_empty();
 

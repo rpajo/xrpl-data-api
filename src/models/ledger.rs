@@ -14,7 +14,7 @@ pub struct DailyLedgerScylla {
 }
 
 #[derive(Debug, FromRow)]
-pub struct LedgerScylla {
+pub struct Ledger {
     pub ledger_index: i64,
     pub ledger_hash: String,
     pub account_hash: String,
@@ -28,7 +28,7 @@ pub struct LedgerScylla {
     pub ledger_processed: bool,
 }
 
-impl Serialize for LedgerScylla {
+impl Serialize for Ledger {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
